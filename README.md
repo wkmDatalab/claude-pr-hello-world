@@ -212,3 +212,5 @@ Phase 3: Add stricter tool hooks and richer traceability.
 Phase 4: Post the review as a real PR comment in CI. **(Done — see "Real PR comments" above.)**
 
 Phase 5: Add Snowflake/Cortex Code SDK mapping.
+
+<!-- demo PR to trigger the agent review workflow -->
