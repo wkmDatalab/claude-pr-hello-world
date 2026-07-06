@@ -1,14 +1,13 @@
 [project]
 name = "claude-pr-review-hello"
 version = "0.1.0"
-description = "Minimal Claude Agent SDK PR-style review demo with GitHub Actions artifacts and traceability logs."
+description = "Bare-bones Claude PR-review co-worker: one script + one workflow."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "anyio>=4.0.0",
     "claude-agent-sdk>=0.1.0",
-    "pytest>=8.0.0",
     "python-dotenv>=1.0.0",
+    "pytest>=8.0.0",
 ]
 
 [tool.pytest.ini_options]
