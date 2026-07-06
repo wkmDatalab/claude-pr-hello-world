@@ -13,6 +13,10 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
+    # Mapped so the email step can gate on it — the `secrets` context is not
+    # available in a step-level `if:`, but `env` is.
+    env:
+      MAIL_SERVER: ${{ secrets.MAIL_SERVER }}
 
     steps:
       - name: Checkout repo
@@ -46,6 +50,14 @@ jobs:
           AFTER_SHA: ${{ github.sha }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_RUN_ID: ${{ github.run_id }}
+
+      - name: Ensure report files exist
+        if: always()
+        run: |
+          mkdir -p reports traceability
+          [ -f reports/AGENT_REVIEW.md ] || echo "No report generated — the review step failed before writing output. See the run log." > reports/AGENT_REVIEW.md
+          [ -f reports/SUGGESTED_FIX.patch ] || : > reports/SUGGESTED_FIX.patch
+          [ -f traceability/run.json ] || echo '{}' > traceability/run.json
 
       - name: Add review to GitHub Actions summary
         if: always()
@@ -82,3 +94,27 @@ jobs:
           path: |
             reports/**
             traceability/**
+
+      # Emails the review report + patch on every run; the subject carries the
+      # job status, so this doubles as the failure alert. Requires the MAIL_*
+      # secrets below (e.g. a Gmail account + app password). If they are unset
+      # the step is skipped, so the workflow still works without email.
+      - name: Email the review
+        if: always() && env.MAIL_SERVER != ''
+        uses: dawidd6/action-send-mail@v18
+        with:
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: ${{ secrets.MAIL_PORT }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          from: Claude Review <${{ secrets.MAIL_USERNAME }}>
+          to: ${{ secrets.MAIL_TO }}
+          subject: "Claude review [${{ job.status }}] — ${{ github.ref_name }} @ ${{ github.sha }}"
+          body: |
+            Claude review for ${{ github.repository }} on ${{ github.ref_name }} (${{ job.status }}).
+
+            Commit: ${{ github.sha }}
+            Run:    ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            The report, proposed patch, and run trace are attached.
+          attachments: reports/AGENT_REVIEW.md,reports/SUGGESTED_FIX.patch,traceability/run.json

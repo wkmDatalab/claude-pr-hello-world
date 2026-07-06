@@ -1,5 +1,7 @@
 # Claude Review Co-worker
 
+[![Claude Review On Push](https://github.com/wkmDatalab/claude-pr-hello-world/actions/workflows/claude-review.yml/badge.svg)](https://github.com/wkmDatalab/claude-pr-hello-world/actions/workflows/claude-review.yml)
+
 An AI teammate that reviews your code on every push and hands you a written
 report plus a ready-to-apply patch — like a colleague who reads your diff,
 writes up what they think, and leaves the fix on your desk for you to check.
@@ -166,6 +168,34 @@ This is the fastest way to experiment with `ROLE` before pushing anything.
    workflow runs and produces the artifacts.
 
 The workflow only needs `contents: read` — it never writes to your repo.
+
+---
+
+## Monitoring the reviews
+
+- **Status badge** — the badge at the top of this README shows whether the
+  latest **Claude Review On Push** run passed or failed. It links straight to
+  the Actions history.
+- **Per-run view** — each run's **Summary** shows the verdict and the proposed
+  patch inline; the full report + patch + trace are in the downloadable
+  **`claude-review-<run_id>`** artifact at the bottom of the run page.
+- **Email (optional)** — the workflow can email the report, patch, and trace on
+  every run; the subject carries the run status, so it doubles as a failure
+  alert. It's skipped automatically unless you add these repo secrets
+  (**Settings → Secrets and variables → Actions**):
+
+  | Secret | Example |
+  | --- | --- |
+  | `MAIL_SERVER` | `smtp.gmail.com` |
+  | `MAIL_PORT` | `465` |
+  | `MAIL_USERNAME` | `you@gmail.com` |
+  | `MAIL_PASSWORD` | a mail **app password** (never your login password) |
+  | `MAIL_TO` | where to send it |
+
+  Email uses the third-party `dawidd6/action-send-mail` action, pinned to a
+  major version; for stricter supply-chain safety, pin it to a commit SHA.
+  GitHub also emails the run's author on failure by default, independent of
+  this step.
 
 ---
 
