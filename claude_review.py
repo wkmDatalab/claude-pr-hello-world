@@ -1,0 +1,147 @@
+"""Claude review co-worker — a drop-in PR reviewer.
+
+Copy this one file plus .github/workflows/claude-review.yml into any repo,
+add an ANTHROPIC_API_KEY secret, and every pull request gets a Claude review
+posted as a comment that updates in place on each push.
+
+Run locally:   ANTHROPIC_API_KEY=sk-ant-...  python claude_review.py
+Run in CI:     the workflow provides ANTHROPIC_API_KEY, GITHUB_TOKEN, and
+               the PR number; the review is posted back to the PR.
+
+------------------------------------------------------------------------------
+To make this your own, you usually only edit the two constants below:
+  REVIEW_TARGETS  — what the agent looks at
+  ROLE            — who the agent is and how it should respond
+Everything under "machinery" rarely needs to change.
+------------------------------------------------------------------------------
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+
+# ── The agent's job — EDIT THESE to change the co-worker's role ──────────────
+REVIEW_TARGETS = ["src/hello_world.py"]
+
+ROLE = """\
+You are a careful code-review co-worker for a Python project.
+
+Review the file(s) listed below. For each one:
+- Give a verdict: FIX NEEDED / NO CHANGE NEEDED / NEEDS HUMAN JUDGMENT.
+- Briefly say what you observed.
+- If FIX NEEDED, propose the smallest fix as a unified diff.
+
+Do not modify any files. Reply with a single Markdown report, nothing else.
+"""
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Next step (token-efficient, precise): instead of whole files, review only the
+# PR diff. Set REVIEW_TARGETS aside and feed the agent the output of
+# `git diff origin/<base>...HEAD`, then ask it to comment on the changed lines.
+
+# ── machinery ────────────────────────────────────────────────────────────────
+
+COMMENT_MARKER = "<!-- claude-review -->"
+REPORT_FILE = ROOT / "reports" / "AGENT_REVIEW.md"
+
+
+def build_prompt() -> str:
+    blocks = []
+    for rel in REVIEW_TARGETS:
+        code = (ROOT / rel).read_text(encoding="utf-8")
+        blocks.append(f"### {rel}\n\n```python\n{code}\n```")
+    return f"{ROLE}\n\n## Files to review\n\n" + "\n\n".join(blocks)
+
+
+async def run_review() -> str:
+    """Ask Claude to review the targets and return the Markdown report."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise SystemExit(
+            "ANTHROPIC_API_KEY is not set. Set it locally (e.g. in .env) or as "
+            "the repository secret used by the workflow, then re-run."
+        )
+
+    from claude_agent_sdk import (
+        AssistantMessage,
+        ClaudeAgentOptions,
+        ClaudeSDKClient,
+        TextBlock,
+    )
+
+    options = ClaudeAgentOptions(
+        cwd=ROOT,
+        max_turns=6,
+        allowed_tools=["Read", "Grep", "Glob"],
+    )
+
+    parts: list[str] = []
+    async with ClaudeSDKClient(options=options) as client:
+        await client.query(build_prompt())
+        async for message in client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        parts.append(block.text)
+                        print(block.text, end="")
+    return "".join(parts).strip()
+
+
+def _github_request(method: str, url: str, token: str, payload: dict | None = None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(url, data=data, method=method)
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("User-Agent", "claude-review")
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read() or "null")
+
+
+def post_or_update_pr_comment(report: str) -> None:
+    """Upsert a single PR comment. No-op when not running against a PR."""
+    token = os.getenv("GITHUB_TOKEN")
+    repo = os.getenv("GITHUB_REPOSITORY")  # "owner/name", set by Actions
+    pr = os.getenv("PR_NUMBER")
+    if not (token and repo and pr):
+        print("\n(No PR context — skipping comment; report saved locally.)")
+        return
+
+    body = f"{COMMENT_MARKER}\n{report}\n\n---\n<sub>🤖 Claude review · updates in place on each push.</sub>"
+    base = f"https://api.github.com/repos/{repo}"
+    try:
+        comments = _github_request("GET", f"{base}/issues/{pr}/comments?per_page=100", token)
+        existing = next((c for c in comments if COMMENT_MARKER in (c.get("body") or "")), None)
+        if existing:
+            _github_request("PATCH", f"{base}/issues/comments/{existing['id']}", token, {"body": body})
+            print(f"\nUpdated PR comment #{existing['id']}.")
+        else:
+            _github_request("POST", f"{base}/issues/{pr}/comments", token, {"body": body})
+            print("\nCreated PR comment.")
+    except urllib.error.HTTPError as err:
+        print(f"\nCould not post PR comment ({err.code}): {err.read().decode(errors='replace')}")
+
+
+def main() -> None:
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(ROOT / ".env", override=False)
+    except ImportError:
+        pass
+
+    report = asyncio.run(run_review())
+    REPORT_FILE.parent.mkdir(exist_ok=True)
+    REPORT_FILE.write_text(report, encoding="utf-8")
+    post_or_update_pr_comment(report)
+
+
+if __name__ == "__main__":
+    main()
