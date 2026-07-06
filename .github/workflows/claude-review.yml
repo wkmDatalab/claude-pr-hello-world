@@ -16,17 +16,17 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
 
@@ -60,14 +60,23 @@ jobs:
           fi
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "## Generated files" >> "$GITHUB_STEP_SUMMARY"
-          echo "- reports/AGENT_REVIEW.md" >> "$GITHUB_STEP_SUMMARY"
-          echo "- reports/SUGGESTED_FIX.patch" >> "$GITHUB_STEP_SUMMARY"
-          echo "- traceability/run.json" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s reports/SUGGESTED_FIX.patch ]; then
+            echo "<details><summary>Proposed fix (reports/SUGGESTED_FIX.patch)</summary>" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+            cat reports/SUGGESTED_FIX.patch >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "_No patch proposed._" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "All files (report, patch, trace) are in the **claude-review-${{ github.run_id }}** artifact below." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload review artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: claude-review-${{ github.run_id }}
           path: |
