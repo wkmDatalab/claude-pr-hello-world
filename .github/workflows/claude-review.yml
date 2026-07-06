@@ -1,27 +1,75 @@
-name: Claude Review
+name: Claude Review On Push
 
 on:
-  pull_request:
+  push:
+    branches:
+      - main
+      - feature/**
   workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   review:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # full history so `git diff <base>...HEAD` works
-      - uses: actions/setup-python@v5
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install claude-agent-sdk
-      - run: python claude_review.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Install dependencies
+        run: |
+          pip install claude-agent-sdk python-dotenv
+
+      - name: Run Claude review
+        run: |
+          python claude_review.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+
+      - name: Add review to GitHub Actions summary
+        if: always()
+        run: |
+          echo "# Claude Code Review" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f reports/AGENT_REVIEW.md ]; then
+            cat reports/AGENT_REVIEW.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No Claude report was generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Generated files" >> "$GITHUB_STEP_SUMMARY"
+          echo "- reports/AGENT_REVIEW.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "- reports/SUGGESTED_FIX.patch" >> "$GITHUB_STEP_SUMMARY"
+          echo "- traceability/run.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload review artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-review-${{ github.run_id }}
+          path: |
+            reports/**
+            traceability/**
