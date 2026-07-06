@@ -130,6 +130,29 @@ reports/pytest-output.txt
 
 If `ANTHROPIC_API_KEY` is missing, `agent_review.py` exits with a clear message; the workflow still uploads the pytest output.
 
+### Real PR comments (Phase 4)
+
+On `pull_request` events the workflow also posts `reports/AGENT_REVIEW.md` as a
+comment on the PR itself, using the built-in `GITHUB_TOKEN` (no extra secret).
+The comment is **upserted**: it carries a hidden marker
+(`<!-- claude-agent-review -->`) so each new push to the branch updates the same
+comment in place instead of adding a new one.
+
+To see it end to end:
+
+1. Push this repo to GitHub with the `ANTHROPIC_API_KEY` secret set.
+2. Create a feature branch, change a file, and open a Pull Request.
+3. Watch the `Agent Review Artifacts` workflow run; when it finishes, the review
+   appears as a PR comment.
+
+Notes:
+
+- The workflow grants `pull-requests: write`, which is what lets the token post
+  comments.
+- PRs opened **from forks** get a read-only `GITHUB_TOKEN`, so the comment step
+  is skipped there; same-repo feature branches (the intended demo flow) work.
+- The uploaded artifact still contains the full report regardless.
+
 ## The local PR simulation
 
 Git by itself handles local version control:
@@ -186,6 +209,6 @@ Phase 2: Allow agent to edit source files on a feature branch.
 
 Phase 3: Add stricter tool hooks and richer traceability.
 
-Phase 4: Add GitHub CLI or API to create/update real PRs.
+Phase 4: Post the review as a real PR comment in CI. **(Done — see "Real PR comments" above.)**
 
 Phase 5: Add Snowflake/Cortex Code SDK mapping.
