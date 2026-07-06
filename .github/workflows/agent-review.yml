@@ -1,0 +1,59 @@
+name: Agent Review Artifacts
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  review:
+    name: Run tests and Claude agent review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run pytest baseline
+        continue-on-error: true
+        run: |
+          mkdir -p reports
+          python -m pytest -q | tee reports/pytest-output.txt
+
+      - name: Run Claude agent review
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python scripts/agent_review.py
+
+      - name: Show generated files
+        if: always()
+        run: |
+          echo "Generated report files:"
+          find reports -maxdepth 3 -type f -print || true
+
+      - name: Upload agent review artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-review-${{ github.run_id }}
+          path: reports/**
+          retention-days: 14

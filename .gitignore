@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Runtime outputs - keep folders, ignore generated contents
+reports/*
+!reports/.gitkeep
+traceability/*
+!traceability/.gitkeep
