@@ -8,7 +8,7 @@ The agent should find two problems and propose the smallest fix:
 
 def greeting() -> str:
     """Return the greeting that should be printed by the app."""
-    return "H world"
+    return "He world"
 
 
 def main() -> None:
